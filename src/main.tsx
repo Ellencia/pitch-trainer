@@ -16,9 +16,24 @@ function App() {
 
   const playNote = () => {
     const ctx = audioRef.current ?? new AudioContext(); audioRef.current = ctx;
-    const osc = ctx.createOscillator(); const gain = ctx.createGain();
-    osc.frequency.value = frequencies[target]; osc.type = 'sine'; gain.gain.value = 0.18;
-    osc.connect(gain).connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 1.2);
+    const now = ctx.currentTime; const duration = 1.8;
+    // 여러 배음과 빠른 attack/감쇠를 조합한 파일 없는 피아노풍 합성음
+    const partials = [
+      { ratio: 1, level: 0.22, type: 'triangle' as OscillatorType },
+      { ratio: 2, level: 0.10, type: 'sine' as OscillatorType },
+      { ratio: 3, level: 0.045, type: 'sine' as OscillatorType },
+      { ratio: 4, level: 0.018, type: 'sine' as OscillatorType },
+      { ratio: 5, level: 0.008, type: 'sine' as OscillatorType },
+    ];
+    partials.forEach(({ ratio, level, type }) => {
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.type = type; osc.frequency.value = frequencies[target] * ratio;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(level, now + 0.008);
+      gain.gain.exponentialRampToValueAtTime(level * 0.32, now + 0.18);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      osc.connect(gain).connect(ctx.destination); osc.start(now); osc.stop(now + duration + 0.05);
+    });
   };
 
   const togglePractice = async () => {
