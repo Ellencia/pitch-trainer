@@ -11,7 +11,7 @@ const scaleSteps = [[0, 2, 4, 5, 7, 9, 11, 12], [0, 2, 3, 5, 7, 8, 10, 12], [0, 
 
 function App() {
   const [mode, setMode] = useState<Mode>('sing'); const [target, setTarget] = useState(5);
-  const [answer, setAnswer] = useState<number | null>(null); const [scaleTarget, setScaleTarget] = useState(0); const [scaleAnswer, setScaleAnswer] = useState<number | null>(null);
+  const [answer, setAnswer] = useState<number | null>(null); const [scaleTarget, setScaleTarget] = useState(0); const [scaleAnswer, setScaleAnswer] = useState<number | null>(null); const [continuous, setContinuous] = useState(true); const [speechStatus, setSpeechStatus] = useState('음성 대기 중');
   const [sequence, setSequence] = useState<number[]>([]); const [sequenceAnswer, setSequenceAnswer] = useState<number[]>([]);
   const [running, setRunning] = useState(false); const [current, setCurrent] = useState<number | null>(null); const [held, setHeld] = useState(0);
   const [score, setScore] = useState(0); const [streak, setStreak] = useState(0); const audioRef = useRef<AudioContext | null>(null); const timerRef = useRef<number | null>(null);
@@ -21,9 +21,11 @@ function App() {
   const newQuestion = () => { setAnswer(null); setScaleAnswer(null); setSequenceAnswer([]); if (mode === 'sequence') setSequence(Array.from({length: 4}, () => Math.floor(Math.random()*7))); else { setTarget(Math.floor(Math.random()*7)); setScaleTarget(Math.floor(Math.random()*3)); } };
   const playScale = () => { const root = frequencies[target]; scaleSteps[scaleTarget].forEach((s,i) => window.setTimeout(() => piano(root * Math.pow(2,s/12), .75), i*500)); };
   const playSequence = () => sequence.forEach((n,i) => window.setTimeout(() => piano(frequencies[n], .7), i*750));
-  const chooseNote = (n: number) => { setAnswer(n); const ok=n===target; setScore(s=>s+(ok?1:0));setStreak(s=>ok?s+1:0); };
-  const chooseScale = (n: number) => { setScaleAnswer(n); const ok=n===scaleTarget;setScore(s=>s+(ok?1:0));setStreak(s=>ok?s+1:0); };
-  const addSequence = (n: number) => { const next=[...sequenceAnswer,n];setSequenceAnswer(next); if(next.length===sequence.length){const ok=next.every((v,i)=>v===sequence[i]);setScore(s=>s+(ok?1:0));setStreak(s=>ok?s+1:0);} };
+  const nextAfterAnswer = () => { if (continuous) window.setTimeout(newQuestion, 900); };
+  const chooseNote = (n: number) => { setAnswer(n); const ok=n===target; setScore(s=>s+(ok?1:0));setStreak(s=>ok?s+1:0); nextAfterAnswer(); };
+  const chooseScale = (n: number) => { setScaleAnswer(n); const ok=n===scaleTarget;setScore(s=>s+(ok?1:0));setStreak(s=>ok?s+1:0); nextAfterAnswer(); };
+  const addSequence = (n: number) => { const next=[...sequenceAnswer,n];setSequenceAnswer(next); if(next.length===sequence.length){const ok=next.every((v,i)=>v===sequence[i]);setScore(s=>s+(ok?1:0));setStreak(s=>ok?s+1:0);if(continuous)window.setTimeout(newQuestion,900);} };
+  const listenForNote = () => { const SpeechRecognition=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;if(!SpeechRecognition){setSpeechStatus('이 브라우저는 음성 인식을 지원하지 않음');return;}const recognition=new SpeechRecognition();recognition.lang='ko-KR';recognition.interimResults=false;setSpeechStatus('듣는 중… 음 이름을 말하세요');recognition.onresult=(event:any)=>{const text=event.results[0][0].transcript.replace(/\s/g,'');const aliases=[['도','c','씨'],['레','d','디'],['미','e','이'],['파','f','에프'],['솔','소','g','지'],['라','a','에이'],['시','b','비']];const index=aliases.findIndex(words=>words.some(word=>text.includes(word)));if(index>=0){setSpeechStatus(`“${noteNames[index]}” 인식`);chooseNote(index);}else setSpeechStatus(`“${text}”을 인식하지 못함`);};recognition.onerror=()=>setSpeechStatus('다시 말해 주세요');recognition.start(); };
   const toggleMic = async () => { if(running){setRunning(false);if(timerRef.current)clearInterval(timerRef.current);return;} const stream=await navigator.mediaDevices.getUserMedia({audio:true});const c=new AudioContext();audioRef.current=c;const source=c.createMediaStreamSource(stream),a=c.createAnalyser();a.fftSize=2048;source.connect(a);const data=new Float32Array(a.fftSize);setRunning(true);setHeld(0);timerRef.current=window.setInterval(()=>{a.getFloatTimeDomainData(data);let cross=0;for(let i=1;i<data.length;i++)if(data[i-1]<0&&data[i]>=0)cross++;const hz=cross*c.sampleRate/data.length;if(hz>80&&hz<1000){const midi=69+12*Math.log2(hz/440);setCurrent(Math.round(midi));const targetMidi=69+12*Math.log2(frequencies[target]/440);setHeld(v=>Math.abs(midi-targetMidi)<.5?Math.min(v+.1,2):0);}},100); };
   useEffect(()=>()=>{if(timerRef.current)clearInterval(timerRef.current)},[]);
   const result = answer === null ? '' : answer === target ? '정답입니다!' : `정답: ${noteNames[target]}`;
